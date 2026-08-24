@@ -35,11 +35,12 @@ function formatNumber(value: number): string {
 }
 
 function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "UTC" }).format(new Date(value));
 }
 
-function formatRelative(value: string): string {
-  const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
+function formatRelative(value: string, now: number | null): string {
+  if (now === null) return `${formatTime(value)} UTC`;
+  const seconds = Math.max(0, Math.round((now - new Date(value).getTime()) / 1000));
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   return `${Math.floor(seconds / 3600)}h ago`;
@@ -77,6 +78,7 @@ export function Dashboard({ initialOverview, initialTraces, initialLogs }: Dashb
   const [selectedTrace, setSelectedTrace] = useState<TraceDetail | null>(null);
   const [selectedLogs, setSelectedLogs] = useState<LogRecord[]>([]);
   const [demoState, setDemoState] = useState("");
+  const [now, setNow] = useState<number | null>(null);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams({ range: String(range), limit: "50", status });
@@ -109,6 +111,15 @@ export function Dashboard({ initialOverview, initialTraces, initialLogs }: Dashb
     const debounce = window.setTimeout(() => void loadData(), 250);
     return () => window.clearTimeout(debounce);
   }, [loadData]);
+
+  useEffect(() => {
+    const firstTick = window.setTimeout(() => setNow(Date.now()), 0);
+    const clock = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => {
+      window.clearTimeout(firstTick);
+      window.clearInterval(clock);
+    };
+  }, []);
 
   async function openTrace(traceId: string) {
     setSelectedTrace(null);
@@ -224,7 +235,7 @@ export function Dashboard({ initialOverview, initialTraces, initialLogs }: Dashb
                       <span className={`severity severity-${item.severity}`}>{item.severity}</span>
                       <strong>{item.title}</strong>
                       <p>{item.evidence}</p>
-                      <small>{item.service} · {formatRelative(item.firstSeen)}</small>
+                      <small>{item.service} · {formatRelative(item.firstSeen, now)}</small>
                     </button>
                   )) : <EmptyState>No service is outside the current working thresholds.</EmptyState>}
                 </div>
@@ -239,7 +250,7 @@ export function Dashboard({ initialOverview, initialTraces, initialLogs }: Dashb
                   {overview.services.map((item) => (
                     <button className="table-row" key={item.service} onClick={() => { setService(item.service); setView("traces"); }}>
                       <span className="service-name"><StatusDot state={item.state} />{item.service}</span>
-                      <span>{formatNumber(item.requests)}</span><span className={item.errorRate > 1 ? "bad-value" : ""}>{item.errorRate.toFixed(2)}%</span><span>{Math.round(item.p95Ms)} ms</span><span>{formatRelative(item.lastSeen)}</span>
+                      <span>{formatNumber(item.requests)}</span><span className={item.errorRate > 1 ? "bad-value" : ""}>{item.errorRate.toFixed(2)}%</span><span>{Math.round(item.p95Ms)} ms</span><span>{formatRelative(item.lastSeen, now)}</span>
                     </button>
                   ))}
                 </div>
