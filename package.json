@@ -1,0 +1,28 @@
+{
+  "name": "telemetry-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An OpenTelemetry and ClickHouse workbench for investigating production failures.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n dashboard,demo -c cyan,magenta \"npm run dev -w @telemetry-workbench/dashboard\" \"npm run dev -w @telemetry-workbench/demo-service\"",
+    "build": "npm run build -w @telemetry-workbench/dashboard && npm run build -w @telemetry-workbench/demo-service",
+    "typecheck": "npm run typecheck -w @telemetry-workbench/dashboard && npm run typecheck -w @telemetry-workbench/demo-service",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "npm run lint -w @telemetry-workbench/dashboard && npm run lint -w @telemetry-workbench/demo-service",
+    "infra:up": "docker compose -f infra/compose.yml up -d",
+    "infra:down": "docker compose -f infra/compose.yml down -v",
+    "infra:logs": "docker compose -f infra/compose.yml logs -f otel-collector clickhouse"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

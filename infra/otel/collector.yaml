@@ -1,0 +1,90 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  file_storage:
+    directory: /var/lib/otelcol
+    create_directory: true
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 384
+    spike_limit_mib: 96
+  resource/normalize:
+    attributes:
+      - key: deployment.environment.name
+        value: local
+        action: insert
+  transform/redact:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - delete_key(span.attributes, "enduser.email")
+          - delete_key(span.attributes, "http.request.header.authorization")
+    log_statements:
+      - context: log
+        statements:
+          - delete_key(log.attributes, "enduser.email")
+          - delete_key(log.attributes, "http.request.header.authorization")
+
+exporters:
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s
+    database: telemetry
+    username: otel
+    password: otel
+    create_schema: true
+    async_insert: true
+    ttl: 72h
+    compress: lz4
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    timeout: 10s
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      num_consumers: 4
+      batch:
+        min_size: 500
+        flush_timeout: 2s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 15s
+      max_elapsed_time: 300s
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [health_check, file_storage]
+  telemetry:
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/normalize, transform/redact]
+      exporters: [clickhouse]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/normalize]
+      exporters: [clickhouse]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/normalize, transform/redact]
+      exporters: [clickhouse]
